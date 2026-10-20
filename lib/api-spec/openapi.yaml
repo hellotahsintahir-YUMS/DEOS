@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: study
+    description: Socratic study coaching
+  - name: google
+    description: Student-owned Google Drive, Docs, and Slides
 paths:
   /healthz:
     get:
@@ -24,6 +28,118 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /study/status:
+    get:
+      operationId: getStudyStatus
+      tags: [study]
+      summary: Check study tutor availability
+      responses:
+        "200":
+          description: Tutor configuration and free-tier guardrail status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyStatus"
+  /study/respond:
+    post:
+      operationId: sendStudyPrompt
+      tags: [study]
+      summary: Get a guiding response for a study conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudyInput"
+      responses:
+        "200":
+          description: A Socratic coaching response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudyReply"
+        "400":
+          description: Invalid study prompt
+        "429":
+          description: Free-tier usage limit reached
+        "503":
+          description: Gemini is not configured
+  /google/status:
+    get:
+      operationId: getGoogleStatus
+      tags: [google]
+      summary: Check this student's Google connection
+      responses:
+        "200":
+          description: Connection and setup status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleStatus"
+  /google/connect:
+    post:
+      operationId: startGoogleConnect
+      tags: [google]
+      summary: Start per-student Google authorization
+      responses:
+        "200":
+          description: Google authorization URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleConnectResponse"
+        "503":
+          description: Google OAuth is not configured
+  /google/files:
+    get:
+      operationId: listGoogleFiles
+      tags: [google]
+      summary: List a student's Google Docs and Slides
+      responses:
+        "200":
+          description: Files available to the connected student
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoogleFile"
+        "401":
+          description: A Google account is not connected
+  /google/files/{fileId}/content:
+    get:
+      operationId: getGoogleFileContent
+      tags: [google]
+      summary: Read a connected Google document or presentation
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Extracted text from a Google Doc or Slide deck
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleFileContent"
+        "401":
+          description: A Google account is not connected
+        "404":
+          description: File not found or unsupported
+  /google/disconnect:
+    post:
+      operationId: disconnectGoogle
+      tags: [google]
+      summary: Disconnect the student's Google account
+      responses:
+        "200":
+          description: Connection removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleDisconnectResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +149,113 @@ components:
           type: string
       required:
         - status
+    StudyMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+          minLength: 1
+          maxLength: 6000
+      required: [role, content]
+    StudyInput:
+      type: object
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 24
+          items:
+            $ref: "#/components/schemas/StudyMessage"
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 80
+        educationLevel:
+          type: string
+          enum: [high-school, university, other]
+        sourceText:
+          type: string
+          maxLength: 18000
+      required: [messages, subject, educationLevel]
+    StudyReply:
+      type: object
+      properties:
+        reply:
+          type: string
+        coachingMove:
+          type: string
+          enum: [question, hint, reflection, encouragement]
+      required: [reply, coachingMove]
+    StudyStatus:
+      type: object
+      properties:
+        available:
+          type: boolean
+        model:
+          type: string
+        freeTierOnly:
+          type: boolean
+        maxMessagesPerHour:
+          type: integer
+      required: [available, model, freeTierOnly, maxMessagesPerHour]
+    GoogleStatus:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        connected:
+          type: boolean
+        email:
+          type: [string, "null"]
+        message:
+          type: string
+      required: [configured, connected, email, message]
+    GoogleConnectResponse:
+      type: object
+      properties:
+        authorizationUrl:
+          type: string
+          format: uri
+      required: [authorizationUrl]
+    GoogleFile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [doc, slides]
+        url:
+          type: string
+          format: uri
+        modifiedAt:
+          type: [string, "null"]
+      required: [id, name, kind, url, modifiedAt]
+    GoogleFileContent:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        kind:
+          type: string
+          enum: [doc, slides]
+        text:
+          type: string
+        url:
+          type: string
+          format: uri
+      required: [id, title, kind, text, url]
+    GoogleDisconnectResponse:
+      type: object
+      properties:
+        disconnected:
+          type: boolean
+      required: [disconnected]
 
