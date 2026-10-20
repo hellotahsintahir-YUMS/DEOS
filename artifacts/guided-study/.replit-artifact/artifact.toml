@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Guided Study"
+description = "A student-first study companion that coaches high school and university learners through problems with questions, hints, and reflective prompts instead of giving away answers. Students can connect their own Google study materials and build on their notes."
+version = "1.0.0"
+id = "artifacts/guided-study"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25612
+
+[services.development]
+run = "pnpm --filter @workspace/guided-study run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/guided-study", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/guided-study/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25612"
+BASE_PATH = "/"
