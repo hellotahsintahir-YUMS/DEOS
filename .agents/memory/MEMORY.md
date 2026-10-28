@@ -1,0 +1,1 @@
+- [Guided Study product direction](guided-study-product-direction.md) — Keep the tutor Socratic, student-owned, free-quota-only, and dark without red or pink.

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   getGetGoogleFileContentQueryKey,
@@ -17,7 +17,6 @@ import {
 } from '@workspace/api-client-react';
 import {
   AlertCircle,
-  ArrowDown,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -39,10 +38,9 @@ import {
   Send,
   ShieldAlert,
   Sparkles,
-  Trash2,
   X,
 } from 'lucide-react';
-import { Link, Route, Switch } from 'wouter';
+import { Link, Route, Switch, useLocation } from 'wouter';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
@@ -57,7 +55,8 @@ const moveLabels: Record<string, string> = {
   encouragement: 'A little encouragement',
 };
 
-function AppShell({ children }: { children: React.ReactNode }) {
+function AppShell({ children }: { children: ReactNode }) {
+  const [currentPath] = useLocation();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -72,10 +71,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="side-nav" aria-label="Main navigation">
           <p className="nav-label">YOUR SPACE</p>
-          <Link href="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`} data-testid="link-study">
+          <Link href="/" className={`nav-link ${currentPath === '/' ? 'active' : ''}`} data-testid="link-study">
             <MessageCircle size={17} /> Guided study <span className="nav-dot" />
           </Link>
-          <Link href="/sources" className={`nav-link ${location.pathname === '/sources' ? 'active' : ''}`} data-testid="link-sources">
+          <Link href="/sources" className={`nav-link ${currentPath === '/sources' ? 'active' : ''}`} data-testid="link-sources">
             <BookOpen size={17} /> My sources
           </Link>
         </nav>
@@ -130,7 +129,7 @@ function SafetyNotice() {
   return (
     <div className="safety-notice" role="note" data-testid="notice-free-tier">
       <div className="safety-icon"><ShieldAlert size={17} /></div>
-      <div><strong>A quick note before you share</strong><p>Google’s unpaid Gemini tier may use prompts and replies to improve its products, and people may review them. Please leave out personal or confidential information.</p></div>
+       <div><strong>A quick note before you share</strong><p>Google’s free Gemini tier may use prompts and replies to improve its products, and people may review them. Leave out personal or confidential information. There is no paid fallback; to guarantee no charge, keep billing disabled for the Google project behind this key.</p></div>
     </div>
   );
 }
@@ -154,19 +153,29 @@ function StudyPage() {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as ChatMessage[];
         if (Array.isArray(parsed)) setMessages(parsed.filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string'));
       }
+      const source = sessionStorage.getItem('guided-study-source');
+      if (source) {
+        const parsedSource = JSON.parse(source) as { title?: unknown; text?: unknown };
+        if (typeof parsedSource.title === 'string' && typeof parsedSource.text === 'string') {
+          setSourceTitle(parsedSource.title);
+          setSourceText(parsedSource.text);
+        }
+        sessionStorage.removeItem('guided-study-source');
+      }
     } catch {
-      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem('guided-study-source');
     }
     setStorageReady(true);
   }, []);
 
   useEffect(() => {
-    if (storageReady) localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    if (storageReady) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   }, [messages, storageReady]);
 
   useEffect(() => {
@@ -198,6 +207,7 @@ function StudyPage() {
     setSourceText('');
     setSourceTitle('');
     setDraft('');
+    sendPrompt.reset();
   };
 
   const addPrompt = (prompt: string) => {
@@ -216,7 +226,9 @@ function StudyPage() {
         </label>
         <label className="control-label">My level
           <span className="select-wrap level-select"><select value={level} onChange={(e) => setLevel(e.target.value as EducationLevel)} data-testid="select-level" aria-label="Education level">
-            <option value="high-school">High school</option><option value="university">University</option><option value="other">Other</option>
+            <option value="high-school">High school</option>
+            <option value="university">University</option>
+            <option value="other">Other</option>
           </select><ChevronDown size={14} /></span>
         </label>
         {hasMessages && <button className="text-button clear-button" onClick={clearChat} data-testid="button-new-conversation"><Plus size={15} /> New conversation</button>}
@@ -254,7 +266,7 @@ function StudyPage() {
               </article>
             ))}
             {sendPrompt.isPending && <div className="message-row assistant"><div className="guide-avatar"><Sparkles size={15} /></div><div className="message-content"><div className="message-byline">Kindred guide <span>Thinking it through</span></div><div className="message-bubble typing-bubble"><i /><i /><i /></div></div></div>}
-            {sendPrompt.isError && <div className="chat-error" role="alert" data-testid="status-send-error"><AlertCircle size={16} /><span>That didn’t go through. Your message is still here—please try again.</span><button onClick={() => {
+      {sendPrompt.isError && <div className="chat-error" role="alert" data-testid="status-send-error"><AlertCircle size={16} /><span>{sendPrompt.error instanceof Error ? sendPrompt.error.message : 'That didn’t go through. Your message is still here—please try again.'}</span><button onClick={() => {
               const last = messages[messages.length - 1];
               if (last?.role === 'user') {
                 const retryMessages = messages.slice(0, -1);
@@ -317,7 +329,7 @@ function SourcesPage() {
   useEffect(() => {
     if (fileContentQuery.data?.text) {
       sessionStorage.setItem('guided-study-source', JSON.stringify({ title: fileContentQuery.data.title, text: fileContentQuery.data.text }));
-      window.location.href = '/';
+      window.location.assign(import.meta.env.BASE_URL || '/');
     }
   }, [fileContentQuery.data]);
 
